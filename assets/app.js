@@ -28,7 +28,7 @@
     token: localStorage.getItem('ro_token') || null,
     user: null, users: [],
     site: 'all', panel: 'leads',
-    leads: [], filters: { status: '', q: '' },
+    leads: [], filters: { status: '', q: '', assignee: '' },
     lastSeen: localStorage.getItem('ro_lastseen') || new Date().toISOString(),
     unread: 0, stats: null, statsDays: 30,
   };
@@ -130,7 +130,7 @@
     if (panel === 'team') return renderTeam();
     if (panel === 'seo') return renderSEO();
     if (panel === 'ads') return renderAds();
-    $('#main').innerHTML = '<div class="card coming"><h2>usage reports</h2><p class="muted">The session-intelligence agent writes its daily, weekly and monthly conversion reports here (phase 2).</p></div>';
+    return renderReports();
   }
 
   // ---------------------------------------------------------------- leads
@@ -152,6 +152,11 @@
           <option value="">every status</option>
           ${['new', 'in_progress', 'lodged', 'cleared', 'refunded', 'dead', 'abandoned'].map((s) => `<option value="${s}" ${state.filters.status === s ? 'selected' : ''}>${STATUS_LABEL[s]}</option>`).join('')}
         </select>
+        <select id="f-assignee">
+          <option value="">anyone</option>
+          <option value="__unassigned" ${state.filters.assignee === '__unassigned' ? 'selected' : ''}>unassigned</option>
+          ${state.users.map((u) => `<option value="${esc(u.email)}" ${state.filters.assignee === u.email ? 'selected' : ''}>${esc((u.name || u.email).toLowerCase())}</option>`).join('')}
+        </select>
         <span class="muted" id="lead-count" style="font-size:13px"></span>
         <span style="flex:1"></span>
         <button class="btn ghost sm-btn" id="refresh">refresh</button>
@@ -159,13 +164,16 @@
       <div class="card" style="padding:6px 8px"><table class="grid" id="lead-table"><tbody><tr><td class="empty">loading…</td></tr></tbody></table></div>`;
     $('#f-q').oninput = debounce(() => { state.filters.q = $('#f-q').value; renderLeadRows(); }, 250);
     $('#f-status').onchange = () => { state.filters.status = $('#f-status').value; loadLeads().then(renderLeadRows); };
+    $('#f-assignee').onchange = () => { state.filters.assignee = $('#f-assignee').value; renderLeadRows(); };
     $('#refresh').onclick = () => loadLeads().then(renderLeadRows);
     try { await loadLeads(); renderLeadRows(); } catch (e) { $('#lead-table tbody').innerHTML = `<tr><td class="empty">${esc(e.message)}</td></tr>`; }
   }
 
   function renderLeadRows() {
     const needle = state.filters.q.toLowerCase();
-    const rows = state.leads.filter((l) => !needle || [l.name, l.email, l.phone, l.service].some((v) => v && String(v).toLowerCase().includes(needle)));
+    let rows = state.leads.filter((l) => !needle || [l.name, l.email, l.phone, l.service].some((v) => v && String(v).toLowerCase().includes(needle)));
+    if (state.filters.assignee === '__unassigned') rows = rows.filter((l) => !l.assignee);
+    else if (state.filters.assignee) rows = rows.filter((l) => l.assignee === state.filters.assignee);
     $('#lead-count').textContent = rows.length + ' lead' + (rows.length === 1 ? '' : 's');
     $('#lead-table').innerHTML = `
       <thead><tr><th>lead</th><th>business</th><th>service</th><th>payment</th><th>status</th><th>assigned</th><th>came in</th></tr></thead>
@@ -403,11 +411,14 @@
              <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option>
              <option value="team" ${u.role === 'team' ? 'selected' : ''}>team</option></select>`
         : `<span class="chip ${u.role === 'admin' ? 'lodged' : 'new'}">${u.role}</span>${self ? ' <span class="lead-sub">(you)</span>' : ''}`;
+      const open = (s.openLoad && s.openLoad[u.email] && s.openLoad[u.email].open) || 0;
       const actions = admin && !self
         ? `${u.pending ? `<button class="btn ghost sm-btn" data-resend="${esc(u.email)}">re-send invite</button> ` : ''}<button class="btn ghost sm-btn" data-remove="${esc(u.email)}" style="color:var(--serious)">remove</button>`
         : '';
-      return `<tr><td><div class="lead-name">${esc((u.name || '').toLowerCase())}</div><div class="lead-sub">${esc(u.email)}</div></td>
-        <td>${access}</td><td>${status}</td><td>${actions}</td></tr>`;
+      return `<tr><td><div class="lead-name" style="cursor:pointer;color:var(--accent)" data-member-leads="${esc(u.email)}" title="see their leads">${esc((u.name || '').toLowerCase())}</div><div class="lead-sub">${esc(u.email)}</div></td>
+        <td>${access}</td><td>${status}</td>
+        <td>${open ? `<b>${open}</b> open` : '<span class="muted">—</span>'}</td>
+        <td>${actions}</td></tr>`;
     };
 
     $('#main').innerHTML = `
@@ -417,7 +428,7 @@
 
       <div class="section-title" style="margin-top:4px">members</div>
       <div class="card" style="padding:6px 8px"><table class="grid">
-        <thead><tr><th>person</th><th>access</th><th>status</th><th></th></tr></thead>
+        <thead><tr><th>person</th><th>access</th><th>status</th><th>workload</th><th></th></tr></thead>
         <tbody>${state.users.map(memberRow).join('')}</tbody></table></div>
 
       <div class="section-title">activity</div>
@@ -433,8 +444,17 @@
           return `<tr><td class="lead-name">${esc((v.name || email).toLowerCase())}</td><td>${v.taken}</td><td>${v.lodged}</td><td><b>${v.cleared}</b></td><td>${v.notes}</td>
             <td>${top ? `<span class="site-pill"><i style="background:${SITE_META[top[0]].color}"></i>${esc(SITE_META[top[0]].label)}</span>` : '<span class="muted">—</span>'}</td></tr>`;
         }).join('') : '<tr><td colspan="6" class="empty">no pipeline activity yet — it shows up as soon as someone takes a lead</td></tr>'}
-        </tbody></table></div>`;
+        </tbody></table></div>
 
+      <div class="section-title">latest activity</div>
+      <div class="card"><ul class="timeline" style="margin:0">${(s.feed || []).length ? s.feed.map((f) => `
+        <li>${esc(f.detail || f.event)} <span class="site-pill" style="margin-left:4px"><i style="background:${(SITE_META[f.site] || {}).color || '#999'}"></i>${esc((SITE_META[f.site] || {}).label || f.site)}</span>
+        <div class="tl-time">${esc(f.actor_name || '')} · ${timeAgo(f.created_at)}</div></li>`).join('') : '<li>nothing yet<div class="tl-time">every take, status change and note lands here</div></li>'}</ul></div>`;
+
+    $('#main').querySelectorAll('[data-member-leads]').forEach((el) => el.onclick = () => {
+      state.filters.assignee = el.dataset.memberLeads; state.filters.status = '';
+      show('leads');
+    });
     $('#main').querySelectorAll('[data-role-for]').forEach((sel) => sel.onchange = async () => {
       try { await api('/api/auth', { action: 'set-role', email: sel.dataset.roleFor, role: sel.value }); toast(`${sel.dataset.roleFor} is now ${sel.value}`); }
       catch (e) { toast(esc(e.message)); renderTeam(); }
@@ -553,6 +573,67 @@
           <td>${c.siteId !== 'other' ? `<span class="site-pill"><i style="background:${SITE_META[c.siteId].color}"></i>${esc(SITE_META[c.siteId].label)}</span>` : '<span class="muted">unmatched</span>'}</td>
           <td>${fmt$(c.spend_cents)}</td><td>${c.clicks}</td><td>${c.impressions}</td></tr>`).join('') : '<tr><td colspan="5" class="empty">no spend in this window</td></tr>'}</tbody></table></div>`;
     $('#a-days').onchange = (e) => { state.statsDays = +e.target.value; renderAds(); };
+  }
+
+  // ---------------------------------------------------------------- usage reports
+  async function renderReports() {
+    $('#main').innerHTML = '<p class="empty">crunching sessions…</p>';
+    let data;
+    try { data = await api('/api/usage-report?range=' + (state.reportRange || 'daily')); }
+    catch (e) { $('#main').innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
+    const rep = data.report;
+    const siteIds = Object.keys(rep.sites).filter((k) => state.site === 'all' || k === state.site);
+
+    if (!data.tracked) {
+      $('#main').innerHTML = `<div class="card coming"><h2>usage reports</h2>
+        <p class="muted">No sessions recorded yet. The tracker is installed on the sites — data appears here as soon as visitors arrive. (If it's been live a while and this stays empty, check that <code style="background:var(--bg);padding:1px 6px;border-radius:4px">supabase/2026-07-15-usage.sql</code> has been run.)</p></div>`;
+      return;
+    }
+
+    const pct = (x) => Math.round(x * 100) + '%';
+    const sevChip = { high: 'abandoned', medium: 'in_progress', low: 'new' };
+    $('#main').innerHTML = `
+      <div class="filters">
+        <select id="rep-range">${['daily', 'weekly', 'monthly'].map((r) => `<option value="${r}" ${(state.reportRange || 'daily') === r ? 'selected' : ''}>${r} (last ${r === 'daily' ? '24h' : r === 'weekly' ? '7 days' : '30 days'})</option>`).join('')}</select>
+        <span class="muted" style="font-size:13px">${data.tracked.toLocaleString()} events analysed</span>
+      </div>
+
+      <div class="section-title" style="margin-top:4px">what to fix — the agent's read</div>
+      <div class="card"><ul style="margin:0;padding-left:2px;list-style:none">
+        ${rep.recommendations.filter((r) => state.site === 'all' || r.site === state.site || r.site === 'all').map((r) => `
+          <li style="padding:8px 0;border-bottom:1px solid var(--line)"><span class="chip ${sevChip[r.severity] || 'new'}">${r.severity}</span> &nbsp;${esc(r.text)}</li>`).join('') || '<li class="muted">no findings for this view</li>'}
+      </ul></div>
+
+      ${siteIds.map((k) => {
+        const s = rep.sites[k]; const meta = SITE_META[k] || { color: '#999', label: k };
+        const f = s.funnel;
+        const bar = (val, max, color) => `<div style="background:var(--bg);border-radius:6px;height:22px;position:relative;margin:3px 0">
+          <div style="width:${max ? Math.max(2, val / max * 100) : 0}%;background:${color};height:100%;border-radius:6px"></div></div>`;
+        return `
+        <div class="section-title"><span class="site-pill"><i style="background:${meta.color}"></i>${esc(meta.label.toLowerCase())}</span></div>
+        <div class="tiles">
+          <div class="tile"><div class="t-label">sessions</div><div class="t-value">${s.sessions}</div><div class="t-sub">${s.pageviews} pageviews</div></div>
+          <div class="tile"><div class="t-label">avg visit</div><div class="t-value">${s.avgSecs}s</div><div class="t-sub">${Object.entries(s.devices).map(([d, n]) => d + ' ' + n).join(' · ')}</div></div>
+          <div class="tile"><div class="t-label">form starts</div><div class="t-value">${f.formStarted}</div><div class="t-sub">${pct(f.startRate)} of sessions</div></div>
+          <div class="tile"><div class="t-label">submitted</div><div class="t-value">${f.submitted}</div><div class="t-sub">${pct(f.completionRate)} completion</div></div>
+        </div>
+        <div class="card" style="margin-bottom:14px">
+          <div style="font-size:12.5px;font-weight:700;color:var(--ink-2)">funnel</div>
+          <div style="font-size:12px" class="muted">visited ${f.visited}</div>${bar(f.visited, f.visited, meta.color)}
+          <div style="font-size:12px" class="muted">started the form ${f.formStarted}</div>${bar(f.formStarted, f.visited, meta.color)}
+          <div style="font-size:12px" class="muted">submitted ${f.submitted}</div>${bar(f.submitted, f.visited, meta.color)}
+        </div>
+        <div class="card" style="padding:6px 8px;margin-bottom:20px"><table class="grid">
+          <thead><tr><th>top pages</th><th>views</th><th>top exit pages</th><th>exits</th></tr></thead>
+          <tbody>${Array.from({ length: Math.max(s.topPages.length, s.topExits.length) }, (_, i) => `
+            <tr><td>${s.topPages[i] ? esc(s.topPages[i][0]) : ''}</td><td>${s.topPages[i] ? s.topPages[i][1] : ''}</td>
+            <td>${s.topExits[i] ? esc(s.topExits[i][0]) : ''}</td><td>${s.topExits[i] ? s.topExits[i][1] : ''}</td></tr>`).join('')}
+          </tbody></table></div>
+        ${s.errors.length ? `<div class="card" style="margin-bottom:20px;border-color:var(--serious)"><b style="font-size:13px;color:var(--serious)">javascript errors</b>
+          <ul style="margin:6px 0 0;padding-left:18px;font-size:13px">${s.errors.map(([k2, n]) => `<li>${esc(k2)} — ${n}×</li>`).join('')}</ul></div>` : ''}`;
+      }).join('')}
+      <p class="muted" style="font-size:12px">daily snapshots save automatically at 5am AEST${data.savedReports.length ? ' · ' + data.savedReports.length + ' saved so far' : ''}</p>`;
+    $('#rep-range').onchange = (e) => { state.reportRange = e.target.value; renderReports(); };
   }
 
   // ---------------------------------------------------------------- modal helpers

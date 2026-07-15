@@ -52,7 +52,20 @@ module.exports = async (req, res) => {
       }
     }));
 
-    const base = { days, sites: Object.fromEntries(Object.entries(SITES).map(([k, s]) => [k, { label: s.label, color: s.color }])), volumes, inflow };
+    // open workload per assignee (new/in_progress leads currently held)
+    const stateRows = (await sbGet(PORTAL,
+      'portal_lead_state?status=in.(new,in_progress)&assignee_email=not.is.null&select=assignee_email,assignee_name,status&limit=2000')) || [];
+    const openLoad = {};
+    for (const r of stateRows) {
+      const w = (openLoad[r.assignee_email] ||= { name: r.assignee_name, open: 0 });
+      w.open += 1;
+    }
+
+    // recent activity feed
+    const feed = (await sbGet(PORTAL,
+      'portal_lead_events?select=created_at,site,actor_name,event,detail&order=created_at.desc&limit=30')) || [];
+
+    const base = { days, sites: Object.fromEntries(Object.entries(SITES).map(([k, s]) => [k, { label: s.label, color: s.color }])), volumes, inflow, openLoad, feed };
     if (user.role !== 'admin') return res.status(200).json(base);
     totals.avg_cents = totals.paid_count ? Math.round(totals.range_cents / totals.paid_count) : 0;
     return res.status(200).json({ ...base, revenue, totals });
