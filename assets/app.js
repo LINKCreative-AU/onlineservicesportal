@@ -210,6 +210,14 @@
         · ${esc(lead.service || '')} · came in ${timeAgo(lead.created_at)}
         ${lead.payment_status ? ` · <span class="chip ${lead.payment_status === 'paid' ? 'paid' : 'unpaid'}">${esc(lead.payment_status)}</span>` : ''}</div>
 
+      ${d.raw.payment_status || d.raw.order_ref ? `<div class="card" style="padding:9px 14px;margin:0 0 12px;font-size:13px">
+        <b>payment</b>
+        ${d.raw.order_ref ? ` · ref <b>${esc(d.raw.order_ref)}</b>` : ''}
+        · <span class="chip ${d.raw.payment_status === 'paid' ? 'paid' : 'unpaid'}">${esc(d.raw.payment_status || '—')}</span>
+        ${d.raw.paid_at ? ` · paid ${timeAgo(d.raw.paid_at)}` : ''}
+        ${d.raw.stripe_session_id ? ` · <a href="https://dashboard.stripe.com/search?query=${encodeURIComponent(d.raw.stripe_session_id)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:700">open in stripe ↗</a>` : ''}
+      </div>` : ''}
+
       <div class="d-actions">
         <button class="btn blue sm-btn" id="d-take">i’ll take it</button>
         <select id="d-assign" class="btn ghost sm-btn" style="appearance:auto">
