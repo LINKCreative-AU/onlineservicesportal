@@ -104,8 +104,8 @@
     const admin = state.user.role === 'admin';
     const panels = [
       ['leads', 'leads'], ['team', 'team'],
-      ...(admin ? [['revenue', 'revenue']] : []),
-      ['ads', 'ads <span class="soon">phase 3</span>'], ['seo', 'seo <span class="soon">phase 3</span>'], ['reports', 'usage reports <span class="soon">phase 2</span>'],
+      ...(admin ? [['revenue', 'revenue'], ['ads', 'ads & roi']] : []),
+      ['seo', 'seo'], ['reports', 'usage reports <span class="soon">phase 2</span>'],
     ];
     $('#panel-nav').innerHTML = panels.map(([id, label]) => `<button data-p="${id}" class="${state.panel === id ? 'on' : ''}">${label}</button>`).join('');
     $('#panel-nav').querySelectorAll('button').forEach((b) => b.onclick = () => show(b.dataset.p));
@@ -115,8 +115,9 @@
     if (panel === 'leads') return renderLeads();
     if (panel === 'revenue') return renderRevenue();
     if (panel === 'team') return renderTeam();
-    const names = { ads: ['google ads & roi', 'Ad spend and ROI per business connect here once the MCC keys land (phase 3).'], seo: ['seo rankings', 'Ahrefs keyword positions per site connect here (phase 3).'], reports: ['usage reports', 'The session-intelligence agent writes its daily, weekly and monthly conversion reports here (phase 2).'] };
-    $('#main').innerHTML = `<div class="card coming"><h2>${names[panel][0]}</h2><p class="muted">${names[panel][1]}</p></div>`;
+    if (panel === 'seo') return renderSEO();
+    if (panel === 'ads') return renderAds();
+    $('#main').innerHTML = '<div class="card coming"><h2>usage reports</h2><p class="muted">The session-intelligence agent writes its daily, weekly and monthly conversion reports here (phase 2).</p></div>';
   }
 
   // ---------------------------------------------------------------- leads
@@ -393,6 +394,80 @@
         }).join('') : '<tr><td colspan="6" class="empty">no pipeline activity yet — it shows up as soon as someone takes a lead</td></tr>'}
         </tbody></table></div>`;
     $('#t-days').onchange = (e) => { state.statsDays = +e.target.value; renderTeam(); };
+  }
+
+  // ---------------------------------------------------------------- seo (ahrefs)
+  async function renderSEO() {
+    $('#main').innerHTML = '<p class="empty">loading rankings…</p>';
+    let data;
+    try { data = await api('/api/seo' + (state.site !== 'all' && state.site !== 'cgt' ? '?site=' + state.site : '')); }
+    catch (e) { $('#main').innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
+    if (!data.configured) {
+      $('#main').innerHTML = `<div class="card coming"><h2>seo rankings</h2><p class="muted">${esc(data.note)}</p></div>`;
+      return;
+    }
+    $('#main').innerHTML = Object.entries(data.sites).map(([siteId, s]) => {
+      if (s.error) return `<div class="card" style="margin-bottom:16px"><div class="section-title" style="margin-top:0">${esc(SITE_META[siteId].label.toLowerCase())}</div><p class="err">${esc(s.error)}</p></div>`;
+      const targets = s.rows.filter((r) => r.target);
+      const rest = s.rows.filter((r) => !r.target).slice(0, 20);
+      const row = (r) => `<tr>
+        <td class="lead-name" style="font-weight:${r.target ? 700 : 500}">${esc(r.keyword)}${r.target ? ' <span class="chip new">target</span>' : ''}</td>
+        <td><b>#${r.position ?? '—'}</b></td>
+        <td>${r.change == null || r.change === 0 ? '<span class="muted">—</span>' : r.change > 0 ? `<span style="color:var(--good);font-weight:700">▲ ${r.change}</span>` : `<span style="color:var(--serious);font-weight:700">▼ ${-r.change}</span>`}</td>
+        <td>${r.volume ?? '—'}</td><td>${r.traffic ?? '—'}</td></tr>`;
+      return `<div class="card" style="margin-bottom:16px;padding:14px 16px">
+        <div class="section-title" style="margin-top:0"><span class="site-pill"><i style="background:${SITE_META[siteId].color}"></i>${esc(SITE_META[siteId].label.toLowerCase())}</span> · ${esc(s.domain)} <span class="muted" style="font-weight:500;font-size:12px">as of ${timeAgo(s.asOf)}</span></div>
+        <table class="grid"><thead><tr><th>keyword</th><th>position</th><th>move</th><th>volume (au)</th><th>traffic</th></tr></thead>
+        <tbody>${targets.map(row).join('')}${rest.map(row).join('') || ''}${!s.rows.length ? '<tr><td colspan="5" class="empty">no organic keywords found yet — normal pre-cutover</td></tr>' : ''}</tbody></table>
+        ${s.missingTargets && s.missingTargets.length ? `<p class="muted" style="font-size:12.5px;margin:10px 4px 2px">not ranking yet: ${s.missingTargets.map(esc).join(' · ')}</p>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  // ---------------------------------------------------------------- ads & roi (admin)
+  async function renderAds() {
+    $('#main').innerHTML = '<p class="empty">loading ad spend…</p>';
+    let ads;
+    try { ads = await api('/api/ads?days=' + state.statsDays); }
+    catch (e) { $('#main').innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
+    if (!ads.configured) {
+      $('#main').innerHTML = `<div class="card coming"><h2>google ads & roi</h2>
+        <p class="muted">still needed:</p>
+        <ul style="text-align:left;max-width:560px;margin:10px auto;color:var(--ink-2)">${ads.missing.map((m) => `<li>${esc(m)}</li>`).join('')}</ul>
+        ${ads.missing.some((m) => m.includes('connect google ads')) ? '<button class="btn blue" id="gads-connect">connect google ads</button>' : ''}</div>`;
+      const b = $('#gads-connect');
+      if (b) b.onclick = async () => { try { const r = await api('/api/google-oauth', { action: 'start' }); location.href = r.url; } catch (e) { toast(esc(e.message)); } };
+      return;
+    }
+    // revenue for ROI comes from the stats endpoint
+    let rev = {};
+    try { const s = await api('/api/stats?days=' + state.statsDays); for (const day of Object.values(s.revenue || {})) for (const [k, v] of Object.entries(day)) rev[k] = (rev[k] || 0) + v; } catch {}
+    const siteIds = Object.keys(SITE_META).filter((k) => k !== 'all');
+    const totalSpend = Object.values(ads.spendBySite).reduce((a, b) => a + b, 0);
+    const totalRev = siteIds.reduce((t, k) => t + (rev[k] || 0), 0);
+    $('#main').innerHTML = `
+      <div class="filters"><select id="a-days">${[7, 30, 90].map((d) => `<option value="${d}" ${state.statsDays === d ? 'selected' : ''}>last ${d} days</option>`).join('')}</select></div>
+      <div class="tiles">
+        <div class="tile"><div class="t-label">ad spend</div><div class="t-value">${fmt$(totalSpend)}</div><div class="t-sub">last ${ads.days} days, all accounts</div></div>
+        <div class="tile"><div class="t-label">revenue</div><div class="t-value">${fmt$(totalRev)}</div><div class="t-sub">same window</div></div>
+        <div class="tile"><div class="t-label">roi</div><div class="t-value">${totalSpend ? ((totalRev - totalSpend) / totalSpend * 100).toFixed(0) + '%' : '—'}</div><div class="t-sub">(revenue − spend) / spend</div></div>
+      </div>
+      <div class="section-title">per business</div>
+      <div class="card" style="padding:6px 8px"><table class="grid">
+        <thead><tr><th>business</th><th>spend</th><th>revenue</th><th>roi</th></tr></thead>
+        <tbody>${siteIds.map((k) => {
+          const sp = ads.spendBySite[k] || 0; const rv = rev[k] || 0;
+          return `<tr><td><span class="site-pill"><i style="background:${SITE_META[k].color}"></i>${esc(SITE_META[k].label)}</span></td>
+            <td>${sp ? fmt$(sp) : '<span class="muted">—</span>'}</td><td>${rv ? fmt$(rv) : '<span class="muted">—</span>'}</td>
+            <td>${sp ? `<b>${((rv - sp) / sp * 100).toFixed(0)}%</b>` : '<span class="muted">—</span>'}</td></tr>`;
+        }).join('')}${ads.spendBySite.other ? `<tr><td class="muted">unmatched campaigns</td><td>${fmt$(ads.spendBySite.other)}</td><td></td><td></td></tr>` : ''}</tbody></table></div>
+      <div class="section-title">campaigns</div>
+      <div class="card" style="padding:6px 8px"><table class="grid">
+        <thead><tr><th>campaign</th><th>business</th><th>spend</th><th>clicks</th><th>impressions</th></tr></thead>
+        <tbody>${ads.campaigns.length ? ads.campaigns.map((c) => `<tr><td class="lead-name">${esc(c.name)}</td>
+          <td>${c.siteId !== 'other' ? `<span class="site-pill"><i style="background:${SITE_META[c.siteId].color}"></i>${esc(SITE_META[c.siteId].label)}</span>` : '<span class="muted">unmatched</span>'}</td>
+          <td>${fmt$(c.spend_cents)}</td><td>${c.clicks}</td><td>${c.impressions}</td></tr>`).join('') : '<tr><td colspan="5" class="empty">no spend in this window</td></tr>'}</tbody></table></div>`;
+    $('#a-days').onchange = (e) => { state.statsDays = +e.target.value; renderAds(); };
   }
 
   // ---------------------------------------------------------------- modal helpers

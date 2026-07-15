@@ -31,6 +31,14 @@ Admins additionally see revenue/ads/ROI panels.
    | `CGT_SUPABASE_URL` / `CGT_SUPABASE_KEY` | when the CGT Clearance rebuild lands |
    | `SETUP_SECRET` | guards the one-time user bootstrap |
    | `PORTAL_SESSION_SECRET` | optional; session signing (falls back to a hash of the portal key) |
+   | `AHREFS_API_KEY` | SEO panel — Ahrefs API v3 |
+   | `GOOGLE_ADS_DEV_TOKEN` | Ads panel — developer token from the MCC's API Center |
+   | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | OAuth client (Google Cloud console) for the in-portal "connect google ads" flow; redirect URI: `<PORTAL_URL>/api/google-oauth` |
+   | `GOOGLE_ADS_MCC_ID` | manager account id, digits only |
+   | `PORTAL_URL` | defaults to `https://registrationoffice.com.au` |
+
+   For SEO + ads also run `supabase/2026-07-15-seo-ads.sql` (snapshots +
+   stored OAuth connection).
 
 4. **Bootstrap the five accounts** (once, after deploy):
 
