@@ -26,6 +26,7 @@
   }
   window.onerror = function (msg, src, line, col) { show(msg + ' @ ' + (src || '').split('/').pop() + ':' + line + ':' + col); };
   window.addEventListener('unhandledrejection', function (e) { show('promise: ' + (e.reason && (e.reason.message || e.reason))); });
+  window.__portalErr = show;
 })();
 </script>
 
@@ -33,7 +34,7 @@
 <div id="login" class="login-wrap" hidden>
   <div class="login-card">
     <div class="wordmark">registration office<span class="dot">.</span></div>
-    <p class="login-sub">the LINK online services portal <span id="build" style="opacity:.45;font-size:11px">· build 8</span></p>
+    <p class="login-sub">the LINK online services portal <span id="build" style="opacity:.45;font-size:11px">· build 9</span></p>
     <form id="login-form" autocomplete="on">
       <label>email<input type="email" id="login-email" autocomplete="username" required></label>
       <label>password<input type="password" id="login-pass" autocomplete="current-password" required></label>

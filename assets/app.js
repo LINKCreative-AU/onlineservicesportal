@@ -68,13 +68,17 @@
   }
 
   async function enterApp(mustChange) {
-    $('#login').hidden = true; $('#app').hidden = false;
-    $('#user-chip').textContent = (state.user.name || state.user.email).toLowerCase() + ' · ' + state.user.role;
-    api('/api/auth', { action: 'users' }).then((u) => { state.users = u; }).catch(() => {});
-    renderTabs(); renderPanelNav(); show('leads');
-    if (mustChange) changePasswordModal(true);
-    if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
-    setInterval(pollNew, 45000);
+    try {
+      sessionStorage.setItem('ro_entered', String(Date.now()));
+      $('#login').hidden = true; $('#app').hidden = false;
+      $('#user-chip').textContent = (state.user.name || state.user.email).toLowerCase() + ' · ' + state.user.role;
+      api('/api/auth', { action: 'users' }).then((u) => { state.users = u; }).catch(() => {});
+      renderTabs(); renderPanelNav(); show('leads');
+      if (mustChange) changePasswordModal(true);
+      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+      setInterval(pollNew, 45000);
+      setTimeout(() => sessionStorage.removeItem('ro_entered'), 4000);
+    } catch (e) { if (window.__portalErr) window.__portalErr('enterApp: ' + e.message); throw e; }
   }
 
   function changePasswordModal(forced) {
@@ -520,8 +524,15 @@
   $('#bell').onclick = () => { state.unread = 0; updateBadge(); if (state.panel !== 'leads') show('leads'); else loadLeads().then(renderLeadRows); };
   $('#user-chip').onclick = () => changePasswordModal(false);
 
+  // reload detector: if the app was entered <4s ago and we're booting again,
+  // the page reloaded right after login — surface that loudly.
+  if (sessionStorage.getItem('ro_entered')) {
+    const ago = Date.now() - Number(sessionStorage.getItem('ro_entered'));
+    sessionStorage.removeItem('ro_entered');
+    if (ago < 8000 && window.__portalErr) window.__portalErr('page RELOADED ' + Math.round(ago / 1000) + 's after entering the app — screenshot this');
+  }
   if (state.token) {
     api('/api/auth', { action: 'me' }).then((me) => { state.user = me; enterApp(me.mustChange); })
-      .catch(() => { $('#login').hidden = false; });
+      .catch((e) => { $('#login').hidden = false; if (window.__portalErr) window.__portalErr('session restore failed: ' + e.message); });
   } else $('#login').hidden = false;
 })();
