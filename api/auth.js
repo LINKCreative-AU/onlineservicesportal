@@ -81,8 +81,31 @@ module.exports = async (req, res) => {
 
     if (action === 'users') {
       const user = requireUser(req, res); if (!user) return;
-      const rows = (await sbGet(PORTAL, 'portal_users?select=email,full_name,role&order=full_name')) || [];
-      return res.status(200).json(rows.map((r) => ({ email: r.email, name: r.full_name, role: r.role })));
+      const rows = (await sbGet(PORTAL, 'portal_users?select=email,full_name,role,created_at,last_login_at,must_change_password&order=full_name')) || [];
+      return res.status(200).json(rows.map((r) => ({
+        email: r.email, name: r.full_name, role: r.role,
+        lastLogin: r.last_login_at, created: r.created_at,
+        pending: !!r.must_change_password && !r.last_login_at, // invited, never set a password
+      })));
+    }
+
+    if (action === 'set-role') {
+      const admin = requireAdmin(req, res); if (!admin) return;
+      if (email === admin.email) return res.status(400).json({ error: 'you can’t change your own access' });
+      const role = req.body.role === 'admin' ? 'admin' : 'team';
+      const acct = await byEmail(email);
+      if (!acct) return res.status(404).json({ error: 'no account for that email' });
+      await sbWrite(PORTAL, `portal_users?id=eq.${acct.id}`, 'PATCH', { role });
+      return res.status(200).json({ ok: true, email, role });
+    }
+
+    if (action === 'remove-user') {
+      const admin = requireAdmin(req, res); if (!admin) return;
+      if (email === admin.email) return res.status(400).json({ error: 'you can’t remove yourself' });
+      const acct = await byEmail(email);
+      if (!acct) return res.status(404).json({ error: 'no account for that email' });
+      await sbWrite(PORTAL, `portal_users?id=eq.${acct.id}`, 'DELETE');
+      return res.status(200).json({ ok: true, removed: email });
     }
 
     if (action === 'change-password') {
@@ -134,7 +157,7 @@ module.exports = async (req, res) => {
 
     if (action === 'add-user') {
       const admin = requireAdmin(req, res); if (!admin) return;
-      if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email.' });
+      if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: `Enter a valid email. (received: "${email}")` });
       if (await byEmail(email)) return res.status(409).json({ error: 'That email already has an account.' });
       const temp = crypto.randomBytes(12).toString('base64url');
       const salt = crypto.randomBytes(16).toString('hex');

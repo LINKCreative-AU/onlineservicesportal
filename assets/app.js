@@ -382,19 +382,45 @@
     return out.length ? out : [maxCents];
   }
 
-  // ---------------------------------------------------------------- team volumes
+  // ---------------------------------------------------------------- team: members + volumes
   async function renderTeam() {
     $('#main').innerHTML = '<p class="empty">loading…</p>';
-    try { state.stats = await api('/api/stats?days=' + state.statsDays); }
-    catch (e) { $('#main').innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
+    try {
+      [state.stats, state.users] = await Promise.all([api('/api/stats?days=' + state.statsDays), api('/api/auth', { action: 'users' })]);
+    } catch (e) { $('#main').innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
     const s = state.stats;
+    const admin = state.user.role === 'admin';
     const people = Object.entries(s.volumes || {}).sort((a, b) => (b[1].cleared + b[1].lodged) - (a[1].cleared + a[1].lodged));
     const inflowTotal = Object.values(s.inflow || {}).reduce((t, d) => t + Object.values(d).reduce((a, b) => a + b, 0), 0);
+
+    const memberRow = (u) => {
+      const self = u.email === state.user.email;
+      const status = u.pending
+        ? '<span class="chip in_progress">invited — not set up yet</span>'
+        : (u.lastLogin ? `<span class="chip cleared">active</span> <span class="lead-sub">last seen ${timeAgo(u.lastLogin)}</span>` : '<span class="chip new">never logged in</span>');
+      const access = admin && !self
+        ? `<select data-role-for="${esc(u.email)}" class="btn ghost sm-btn" style="appearance:auto">
+             <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option>
+             <option value="team" ${u.role === 'team' ? 'selected' : ''}>team</option></select>`
+        : `<span class="chip ${u.role === 'admin' ? 'lodged' : 'new'}">${u.role}</span>${self ? ' <span class="lead-sub">(you)</span>' : ''}`;
+      const actions = admin && !self
+        ? `${u.pending ? `<button class="btn ghost sm-btn" data-resend="${esc(u.email)}">re-send invite</button> ` : ''}<button class="btn ghost sm-btn" data-remove="${esc(u.email)}" style="color:var(--serious)">remove</button>`
+        : '';
+      return `<tr><td><div class="lead-name">${esc((u.name || '').toLowerCase())}</div><div class="lead-sub">${esc(u.email)}</div></td>
+        <td>${access}</td><td>${status}</td><td>${actions}</td></tr>`;
+    };
 
     $('#main').innerHTML = `
       <div class="filters"><select id="t-days">${[7, 30, 90].map((d) => `<option value="${d}" ${state.statsDays === d ? 'selected' : ''}>last ${d} days</option>`).join('')}</select>
         <span style="flex:1"></span>
-        ${state.user.role === 'admin' ? '<button class="btn blue sm-btn" id="t-invite">invite someone</button>' : ''}</div>
+        ${admin ? '<button class="btn blue sm-btn" id="t-invite">invite someone</button>' : ''}</div>
+
+      <div class="section-title" style="margin-top:4px">members</div>
+      <div class="card" style="padding:6px 8px"><table class="grid">
+        <thead><tr><th>person</th><th>access</th><th>status</th><th></th></tr></thead>
+        <tbody>${state.users.map(memberRow).join('')}</tbody></table></div>
+
+      <div class="section-title">activity</div>
       <div class="tiles">
         <div class="tile"><div class="t-label">leads in</div><div class="t-value">${inflowTotal}</div><div class="t-sub">all sites, last ${s.days} days</div></div>
         ${people.map(([email, v]) => `<div class="tile"><div class="t-label">${esc((v.name || email).toLowerCase())}</div><div class="t-value" style="font-size:22px">${v.cleared} cleared</div><div class="t-sub">${v.taken} taken · ${v.lodged} lodged</div></div>`).join('')}
@@ -408,6 +434,20 @@
             <td>${top ? `<span class="site-pill"><i style="background:${SITE_META[top[0]].color}"></i>${esc(SITE_META[top[0]].label)}</span>` : '<span class="muted">—</span>'}</td></tr>`;
         }).join('') : '<tr><td colspan="6" class="empty">no pipeline activity yet — it shows up as soon as someone takes a lead</td></tr>'}
         </tbody></table></div>`;
+
+    $('#main').querySelectorAll('[data-role-for]').forEach((sel) => sel.onchange = async () => {
+      try { await api('/api/auth', { action: 'set-role', email: sel.dataset.roleFor, role: sel.value }); toast(`${sel.dataset.roleFor} is now ${sel.value}`); }
+      catch (e) { toast(esc(e.message)); renderTeam(); }
+    });
+    $('#main').querySelectorAll('[data-resend]').forEach((b) => b.onclick = async () => {
+      try { await api('/api/auth', { action: 'invite', email: b.dataset.resend }); toast('invite re-sent to ' + b.dataset.resend); }
+      catch (e) { toast(esc(e.message)); }
+    });
+    $('#main').querySelectorAll('[data-remove]').forEach((b) => b.onclick = async () => {
+      if (!confirm(`Remove ${b.dataset.remove}'s access to the portal?`)) return;
+      try { await api('/api/auth', { action: 'remove-user', email: b.dataset.remove }); toast('removed ' + b.dataset.remove); renderTeam(); }
+      catch (e) { toast(esc(e.message)); }
+    });
     $('#t-days').onchange = (e) => { state.statsDays = +e.target.value; renderTeam(); };
     const inviteBtn = $('#t-invite');
     if (inviteBtn) inviteBtn.onclick = () => {
