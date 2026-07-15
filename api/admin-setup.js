@@ -43,15 +43,27 @@ module.exports = async (req, res) => {
         dom = created.id ? created : { error: created };
       }
       if (dom && dom.id) {
-        if (q.action === 'resend-verify') await rs(`/domains/${dom.id}/verify`, { method: 'POST' });
-        const detail = await (await rs(`/domains/${dom.id}`)).json();
-        out.resend = {
-          status: detail.status,
-          addTheseAtGoDaddy: (detail.records || []).map((r) => ({
-            type: r.record || r.type, name: r.name, value: r.value, priority: r.priority ?? undefined, status: r.status,
-          })),
-          note: detail.status !== 'verified' ? 'Add the records above at GoDaddy, then call again with &action=resend-verify' : 'Domain verified — invite emails will send.',
-        };
+        let verifyResult;
+        if (q.action === 'resend-verify') {
+          const v = await rs(`/domains/${dom.id}/verify`, { method: 'POST' });
+          verifyResult = { http: v.status, body: await v.json().catch(() => null) };
+        }
+        const dRes = await rs(`/domains/${dom.id}`);
+        const detail = await dRes.json().catch(() => ({}));
+        if (!dRes.ok || !detail.status) {
+          out.resend = { problem: 'unexpected domain response from Resend', http: dRes.status, raw: detail, domainId: dom.id, verifyResult };
+        } else {
+          out.resend = {
+            status: detail.status,
+            domainId: dom.id,
+            verifyResult,
+            dnsRecords: (detail.records || []).map((r) => ({
+              type: r.record || r.type, name: r.name, value: r.value, priority: r.priority ?? undefined, status: r.status,
+            })),
+            note: detail.status === 'verified' ? 'Domain verified — invite emails will send.'
+              : 'Records show their individual status above; once DNS has propagated call again with &action=resend-verify.',
+          };
+        }
       } else out.resend = { error: dom && dom.error ? dom.error : 'could not create/find domain' };
     } else out.resend = 'RESEND_API_KEY missing';
 
