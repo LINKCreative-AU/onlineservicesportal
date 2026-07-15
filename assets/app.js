@@ -78,6 +78,12 @@
       if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
       setInterval(pollNew, 45000);
       setTimeout(() => sessionStorage.removeItem('ro_entered'), 4000);
+      toast(`welcome, ${(state.user.name || '').toLowerCase()} — you're in`);
+      setTimeout(() => {
+        const appVisible = !$('#app').hidden && document.body.contains($('#site-tabs'));
+        const tabsRendered = $('#site-tabs').children.length > 0;
+        if (!appVisible || !tabsRendered) window.__portalErr && window.__portalErr(`app shell failed: visible=${appVisible} tabs=${tabsRendered} — screenshot this`);
+      }, 800);
     } catch (e) { if (window.__portalErr) window.__portalErr('enterApp: ' + e.message); throw e; }
   }
 
