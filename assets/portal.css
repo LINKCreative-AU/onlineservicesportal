@@ -163,9 +163,21 @@ svg.chart text { font-family: 'Figtree', sans-serif; }
 .coming { text-align: center; padding: 70px 20px; }
 .coming h2 { letter-spacing: -0.02em; }
 
+/* tables scroll sideways instead of crushing on small screens */
+.card { overflow-x: auto; }
+table.grid { min-width: 640px; }
+
 @media (max-width: 720px) {
-  .topbar { padding: 12px 14px; gap: 10px; }
-  .main, .panelnav { padding-left: 14px; padding-right: 14px; }
+  .topbar { padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
+  .topbar .wordmark.sm { font-size: 15px; }
+  .sites { order: 3; flex-basis: 100%; padding-bottom: 2px; }
+  .sites button { padding: 6px 12px; font-size: 13px; }
+  .user-chip { display: none; }
+  .panelnav { overflow-x: auto; }
+  .panelnav button { white-space: nowrap; padding: 8px 10px; font-size: 13px; }
+  .main, .panelnav { padding-left: 12px; padding-right: 12px; }
+  .tiles { grid-template-columns: repeat(2, 1fr); }
+  .filters input[type=search] { min-width: 0; flex: 1; }
   .kv { grid-template-columns: 1fr; }
   .drawer { width: 100vw; border-radius: 0; }
 }
