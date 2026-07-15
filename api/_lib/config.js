@@ -125,8 +125,17 @@ function verify(token) {
 // Every API route calls this; returns {email, name, role} or sends 401 itself.
 function requireUser(req, res) {
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!token) { res.status(401).json({ error: 'no session token on request' }); return null; }
   const payload = verify(token);
-  if (!payload) { res.status(401).json({ error: 'session expired — log in again' }); return null; }
+  if (!payload) {
+    let reason = 'bad signature';
+    try {
+      const body = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString('utf8'));
+      if (body.exp && body.exp < Date.now() / 1000) reason = 'expired';
+    } catch { reason = 'malformed'; }
+    res.status(401).json({ error: `session rejected (${reason}) — log in again` });
+    return null;
+  }
   return payload;
 }
 const requireAdmin = (req, res) => {

@@ -40,7 +40,10 @@
       : { headers: { Authorization: 'Bearer ' + state.token } };
     const r = await fetch(path, opts);
     const data = await r.json().catch(() => ({}));
-    if (r.status === 401 && state.user) { logout(); throw new Error('session expired'); }
+    if (r.status === 401 && state.user) {
+      if (window.__portalErr) window.__portalErr(`401 from ${path.split('?')[0]} right after login (server said: "${data.error || '?'}") — screenshot this`);
+      logout(); throw new Error('session expired');
+    }
     if (!r.ok) throw new Error(data.error || 'request failed');
     return data;
   }
