@@ -35,6 +35,7 @@ module.exports = async (req, res) => {
   try {
     const out = { domain: DOMAIN };
 
+
     out.env = Object.fromEntries([
       'PORTAL_SUPABASE_URL', 'ARO_SUPABASE_URL', 'ARO_SUPABASE_KEY', 'DASPA_SUPABASE_URL', 'DASPA_SUPABASE_KEY',
       'AHREFS_API_KEY', 'RESEND_API_KEY', 'EMAIL_FROM', 'GOOGLE_ADS_DEV_TOKEN', 'GOOGLE_OAUTH_CLIENT_ID',
@@ -47,6 +48,11 @@ module.exports = async (req, res) => {
       catch (e) { out.tables[t] = /does not exist|schema cache/i.test(e.message) ? 'MISSING — run the SQL' : 'error: ' + e.message.slice(0, 120); }
     }
     out.sqlEditor = 'https://supabase.com/dashboard/project/' + String(process.env.PORTAL_SUPABASE_URL || process.env.ARO_SUPABASE_URL || '').replace(/^https?:\/\//, '').split('.')[0] + '/sql/new';
+
+    try {
+      const users = (await sbGet(PORTAL, 'portal_users?select=email,full_name,role,must_change_password,last_login_at,pass_hash')) || [];
+      out.users = users.map((u) => ({ email: u.email, name: u.full_name, role: u.role, mustChange: u.must_change_password, lastLogin: u.last_login_at, hashLen: (u.pass_hash || '').length }));
+    } catch (e) { out.users = 'error: ' + e.message.slice(0, 120); }
 
     if (process.env.RESEND_API_KEY) {
       const list = await (await rs('/domains')).json();
