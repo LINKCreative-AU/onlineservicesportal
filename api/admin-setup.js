@@ -6,7 +6,8 @@
 // registrationoffice.com.au — creating the domain in Resend on first call and
 // echoing the exact DNS records to add at GoDaddy.
 
-const { PORTAL, sbGet } = require('./_lib/config');
+const crypto = require('crypto');
+const { PORTAL, sbGet, sbWrite, hashPass } = require('./_lib/config');
 
 const RESEND = 'https://api.resend.com';
 const DOMAIN = (process.env.PORTAL_URL || 'https://registrationoffice.com.au').replace(/^https?:\/\/(www\.)?/, '');
@@ -34,6 +35,34 @@ module.exports = async (req, res) => {
   if (!process.env.SETUP_SECRET || q.secret !== process.env.SETUP_SECRET) return res.status(401).json({ error: 'bad secret' });
   try {
     const out = { domain: DOMAIN };
+
+    // Browser-triggered bootstrap: creates the default accounts and emails
+    // each an invite link (no credentials in the URL or response). Same
+    // idempotence as POST /api/auth bootstrap — refuses if users exist.
+    if (q.action === 'bootstrap') {
+      const auth = require('./auth');
+      const existing = await sbGet(PORTAL, 'portal_users?select=id&limit=1');
+      if (existing === null) return res.status(503).json({ error: 'portal_users table missing — run the SQL first' });
+      if (existing.length) return res.status(409).json({ error: 'users already exist — log in at /' });
+      const created = [];
+      for (const u of auth.DEFAULT_USERS) {
+        const salt = crypto.randomBytes(16).toString('hex');
+        const acct = {
+          id: crypto.randomUUID(), email: u.email, full_name: u.name, role: u.role,
+          pass_hash: hashPass(crypto.randomBytes(18).toString('base64url'), salt), // unknown to anyone — invite link sets the real one
+          pass_salt: salt, must_change_password: true,
+        };
+        await sbWrite(PORTAL, 'portal_users', 'POST', acct);
+        try {
+          await auth.sendSetPasswordEmail(acct, 'invite');
+          created.push({ email: acct.email, invited: true });
+        } catch (e) {
+          await sbWrite(PORTAL, `portal_users?id=eq.${acct.id}`, 'DELETE');
+          created.push({ email: acct.email, invited: false, error: e.message.slice(0, 160), note: 'account rolled back — reload this URL to retry' });
+        }
+      }
+      return res.status(200).json({ bootstrap: created, next: 'check both inboxes for "your registration office login" and click the link' });
+    }
 
 
     out.env = Object.fromEntries([

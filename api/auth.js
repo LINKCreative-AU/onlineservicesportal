@@ -191,3 +191,7 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'something went wrong — try again' });
   }
 };
+
+// shared with api/admin-setup.js (browser-triggered bootstrap)
+module.exports.sendSetPasswordEmail = sendSetPasswordEmail;
+module.exports.DEFAULT_USERS = DEFAULT_USERS;
