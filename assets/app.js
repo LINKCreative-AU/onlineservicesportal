@@ -392,7 +392,9 @@
     const inflowTotal = Object.values(s.inflow || {}).reduce((t, d) => t + Object.values(d).reduce((a, b) => a + b, 0), 0);
 
     $('#main').innerHTML = `
-      <div class="filters"><select id="t-days">${[7, 30, 90].map((d) => `<option value="${d}" ${state.statsDays === d ? 'selected' : ''}>last ${d} days</option>`).join('')}</select></div>
+      <div class="filters"><select id="t-days">${[7, 30, 90].map((d) => `<option value="${d}" ${state.statsDays === d ? 'selected' : ''}>last ${d} days</option>`).join('')}</select>
+        <span style="flex:1"></span>
+        ${state.user.role === 'admin' ? '<button class="btn blue sm-btn" id="t-invite">invite someone</button>' : ''}</div>
       <div class="tiles">
         <div class="tile"><div class="t-label">leads in</div><div class="t-value">${inflowTotal}</div><div class="t-sub">all sites, last ${s.days} days</div></div>
         ${people.map(([email, v]) => `<div class="tile"><div class="t-label">${esc((v.name || email).toLowerCase())}</div><div class="t-value" style="font-size:22px">${v.cleared} cleared</div><div class="t-sub">${v.taken} taken · ${v.lodged} lodged</div></div>`).join('')}
@@ -407,6 +409,36 @@
         }).join('') : '<tr><td colspan="6" class="empty">no pipeline activity yet — it shows up as soon as someone takes a lead</td></tr>'}
         </tbody></table></div>`;
     $('#t-days').onchange = (e) => { state.statsDays = +e.target.value; renderTeam(); };
+    const inviteBtn = $('#t-invite');
+    if (inviteBtn) inviteBtn.onclick = () => {
+      openModal(`
+        <h3>invite someone</h3>
+        <p class="muted" style="font-size:13px">They get an email with a set-password link and land straight in the portal.</p>
+        <label>name<input id="iv-name" placeholder="Chris"></label>
+        <label>email<input id="iv-email" type="email" placeholder="chris@link.com.au"></label>
+        <label>access<select id="iv-role" style="display:block;width:100%;margin-top:5px;padding:11px 14px;border:1.5px solid var(--line);border-radius:12px;background:var(--bg)">
+          <option value="admin">admin — sees revenue, ads & roi</option>
+          <option value="team">team — leads & seo only</option>
+        </select></label>
+        <p class="err" id="iv-err" hidden></p>
+        <button class="btn primary" id="iv-go" style="width:100%">send invite</button>
+      `);
+      $('#iv-go').onclick = async () => {
+        const err = $('#iv-err'); err.hidden = true;
+        try {
+          const r = await api('/api/auth', { action: 'add-user', email: $('#iv-email').value.trim(), name: $('#iv-name').value.trim(), role: $('#iv-role').value });
+          if (r.invited) { closeModal(); toast(`invite emailed to ${r.created}`); }
+          else {
+            err.style.color = '';
+            err.textContent = r.emailError
+              ? `account created but the email failed (${r.emailError}) — temp password: ${r.tempPassword}`
+              : `account created — temp password (share securely, shown once): ${r.tempPassword}`;
+            err.hidden = false;
+          }
+          renderTeam();
+        } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+      };
+    };
   }
 
   // ---------------------------------------------------------------- seo (ahrefs)
