@@ -487,6 +487,33 @@
     catch (ex) { err.textContent = ex.message; err.hidden = false; }
   });
   $('#logout').onclick = logout;
+  $('#forgot').onclick = async (e) => {
+    e.preventDefault();
+    const email = prompt('email on your account:');
+    if (!email) return;
+    await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reset-request', email: email.trim() }) }).catch(() => {});
+    toast('if that email has an account, a set-password link is on its way');
+  };
+  const inviteTok = new URLSearchParams(location.search).get('invite');
+  if (inviteTok) {
+    $('#login').hidden = false;
+    $('#login-form').hidden = true; $('#invite-form').hidden = false;
+    $('#invite-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = $('#invite-err'); err.hidden = true;
+      if ($('#invite-pass').value !== $('#invite-pass2').value) { err.textContent = 'passwords don’t match'; err.hidden = false; return; }
+      try {
+        const r = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'accept-invite', token: inviteTok, password: $('#invite-pass').value }) });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'failed');
+        state.token = data.token; localStorage.setItem('ro_token', data.token);
+        state.user = data;
+        history.replaceState(null, '', '/');
+        $('#login-form').hidden = false; $('#invite-form').hidden = true;
+        enterApp(false);
+      } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+    });
+  }
   $('#bell').onclick = () => { state.unread = 0; updateBadge(); if (state.panel !== 'leads') show('leads'); else loadLeads().then(renderLeadRows); };
   $('#user-chip').onclick = () => changePasswordModal(false);
 

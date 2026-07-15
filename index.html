@@ -23,6 +23,15 @@
       <label>password<input type="password" id="login-pass" autocomplete="current-password" required></label>
       <button class="btn primary" type="submit">log in</button>
       <p class="err" id="login-err" hidden></p>
+      <p style="text-align:center;margin:14px 0 0"><a href="#" id="forgot" style="color:#8B8B93;font-size:13px;font-weight:600">forgot password?</a></p>
+    </form>
+    <form id="invite-form" autocomplete="on" hidden>
+      <p style="font-weight:700;margin:0 0 4px">welcome — set your password</p>
+      <p class="muted" style="font-size:13px;color:#8B8B93;margin:0 0 16px">10+ characters. You'll be signed straight in.</p>
+      <label>new password<input type="password" id="invite-pass" autocomplete="new-password" required></label>
+      <label>repeat it<input type="password" id="invite-pass2" autocomplete="new-password" required></label>
+      <button class="btn primary" type="submit">set password &amp; log in</button>
+      <p class="err" id="invite-err" hidden></p>
     </form>
   </div>
 </div>

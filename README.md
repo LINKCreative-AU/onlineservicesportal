@@ -48,10 +48,19 @@ Admins additionally see revenue/ads/ROI panels.
      -d '{"action":"bootstrap","secret":"<SETUP_SECRET>"}'
    ```
 
-   Default accounts are james/chris/juan (admin) and france/mary (team) at
-   `@link.com.au` — pass a `users` array in the same request to use different
-   emails. The response contains each person's **temporary password, shown
-   once**. Everyone is forced to set their own password at first login.
+   Default accounts: **james@link.com.au and juan@link.com.au (admin)**.
+   With `RESEND_API_KEY` + `EMAIL_FROM` set, bootstrap emails each person a
+   set-password invite link (7 days, signs them straight in) — no passwords
+   ever shown. Without Resend it falls back to one-time temp passwords in the
+   response. Add more people later from an admin session:
+
+   ```
+   {"action":"add-user","email":"mary@link.com.au","name":"Mary","role":"team"}
+   ```
+
+   `{"action":"invite","email":...}` re-sends a set-password link, and the
+   login screen has a self-serve "forgot password?" flow.
+   Note: the `EMAIL_FROM` domain must be verified in Resend.
 
 ## How it fits together
 
