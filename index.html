@@ -14,12 +14,26 @@
 <link rel="stylesheet" href="/assets/portal.css">
 </head>
 <body data-palette="#2F54EB,#0D9488,#D97706,#DB2777">
+<div id="boot-err" style="display:none;position:fixed;top:0;left:0;right:0;z-index:999;background:#B91C1C;color:#fff;font:600 13px/1.4 Arial,sans-serif;padding:10px 16px;word-break:break-word"></div>
+<script>
+(function () {
+  var el = null;
+  function show(msg) {
+    el = el || document.getElementById('boot-err');
+    if (!el) return;
+    el.style.display = 'block';
+    el.textContent = 'portal error (screenshot this): ' + msg;
+  }
+  window.onerror = function (msg, src, line, col) { show(msg + ' @ ' + (src || '').split('/').pop() + ':' + line + ':' + col); };
+  window.addEventListener('unhandledrejection', function (e) { show('promise: ' + (e.reason && (e.reason.message || e.reason))); });
+})();
+</script>
 
 <!-- ============================================================ login -->
 <div id="login" class="login-wrap" hidden>
   <div class="login-card">
     <div class="wordmark">registration office<span class="dot">.</span></div>
-    <p class="login-sub">the LINK online services portal</p>
+    <p class="login-sub">the LINK online services portal <span id="build" style="opacity:.45;font-size:11px">· build 8</span></p>
     <form id="login-form" autocomplete="on">
       <label>email<input type="email" id="login-email" autocomplete="username" required></label>
       <label>password<input type="password" id="login-pass" autocomplete="current-password" required></label>

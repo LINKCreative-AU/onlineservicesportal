@@ -482,9 +482,10 @@
   // ---------------------------------------------------------------- boot
   $('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const err = $('#login-err'); err.hidden = true;
-    try { await login($('#login-email').value.trim(), $('#login-pass').value); }
-    catch (ex) { err.textContent = ex.message; err.hidden = false; }
+    const err = $('#login-err');
+    err.textContent = 'logging in…'; err.hidden = false; err.style.color = '#55555C';
+    try { await login($('#login-email').value.trim(), $('#login-pass').value); err.hidden = true; }
+    catch (ex) { err.textContent = ex.message; err.style.color = ''; err.hidden = false; }
   });
   $('#logout').onclick = logout;
   $('#forgot').onclick = async (e) => {
@@ -500,8 +501,9 @@
     $('#login-form').hidden = true; $('#invite-form').hidden = false;
     $('#invite-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const err = $('#invite-err'); err.hidden = true;
-      if ($('#invite-pass').value !== $('#invite-pass2').value) { err.textContent = 'passwords don’t match'; err.hidden = false; return; }
+      const err = $('#invite-err');
+      err.textContent = 'saving…'; err.hidden = false; err.style.color = '#55555C';
+      if ($('#invite-pass').value !== $('#invite-pass2').value) { err.textContent = 'passwords don’t match'; err.style.color = ''; return; }
       try {
         const r = await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'accept-invite', token: inviteTok, password: $('#invite-pass').value }) });
         const data = await r.json();
@@ -510,8 +512,9 @@
         state.user = data;
         history.replaceState(null, '', '/');
         $('#login-form').hidden = false; $('#invite-form').hidden = true;
+        err.hidden = true;
         enterApp(false);
-      } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+      } catch (ex) { err.textContent = ex.message; err.style.color = ''; err.hidden = false; }
     });
   }
   $('#bell').onclick = () => { state.unread = 0; updateBadge(); if (state.panel !== 'leads') show('leads'); else loadLeads().then(renderLeadRows); };
