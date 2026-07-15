@@ -11,10 +11,23 @@ const { PORTAL, sbGet } = require('./_lib/config');
 const RESEND = 'https://api.resend.com';
 const DOMAIN = (process.env.PORTAL_URL || 'https://registrationoffice.com.au').replace(/^https?:\/\/(www\.)?/, '');
 
-const rs = (path, opts) => fetch(`${RESEND}${path}`, {
-  ...opts,
-  headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json', ...(opts && opts.headers) },
-});
+// Resend allows 2 req/s — pace every call and retry once on 429.
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function rs(path, opts) {
+  await sleep(650);
+  let r = await fetch(`${RESEND}${path}`, {
+    ...opts,
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json', ...(opts && opts.headers) },
+  });
+  if (r.status === 429) {
+    await sleep(1200);
+    r = await fetch(`${RESEND}${path}`, {
+      ...opts,
+      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json', ...(opts && opts.headers) },
+    });
+  }
+  return r;
+}
 
 module.exports = async (req, res) => {
   const q = req.query || {};
