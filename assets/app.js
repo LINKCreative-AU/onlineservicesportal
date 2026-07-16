@@ -163,13 +163,14 @@
       </div>
       <div class="card" style="padding:6px 8px"><table class="grid" id="lead-table"><tbody><tr><td class="empty">loading…</td></tr></tbody></table></div>`;
     $('#f-q').oninput = debounce(() => { state.filters.q = $('#f-q').value; renderLeadRows(); }, 250);
-    $('#f-status').onchange = () => { state.filters.status = $('#f-status').value; loadLeads().then(renderLeadRows); };
+    $('#f-status').onchange = () => { state.filters.status = $('#f-status').value; loadLeads().then(renderLeadRows).catch(() => {}); };
     $('#f-assignee').onchange = () => { state.filters.assignee = $('#f-assignee').value; renderLeadRows(); };
-    $('#refresh').onclick = () => loadLeads().then(renderLeadRows);
-    try { await loadLeads(); renderLeadRows(); } catch (e) { $('#lead-table tbody').innerHTML = `<tr><td class="empty">${esc(e.message)}</td></tr>`; }
+    $('#refresh').onclick = () => loadLeads().then(renderLeadRows).catch(() => {});
+    try { await loadLeads(); renderLeadRows(); } catch (e) { const tb = $('#lead-table tbody'); if (tb) tb.innerHTML = `<tr><td class="empty">${esc(e.message)}</td></tr>`; }
   }
 
   function renderLeadRows() {
+    if (state.panel !== 'leads' || !$('#lead-table')) return;
     const needle = state.filters.q.toLowerCase();
     let rows = state.leads.filter((l) => !needle || [l.name, l.email, l.phone, l.service].some((v) => v && String(v).toLowerCase().includes(needle)));
     if (state.filters.assignee === '__unassigned') rows = rows.filter((l) => !l.assignee);
